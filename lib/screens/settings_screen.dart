@@ -11,29 +11,36 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final TextEditingController _ipController = TextEditingController();
+  final TextEditingController _camIpController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     // Pre-fill the current IP
     _ipController.text = ref.read(ipAddressProvider);
+    _camIpController.text = ref.read(camIpAddressProvider);
   }
 
   @override
   void dispose() {
     _ipController.dispose();
+    _camIpController.dispose();
     super.dispose();
   }
 
   void _saveIp() {
     final ip = _ipController.text.trim();
+    final camIp = _camIpController.text.trim();
     if (ip.isNotEmpty) {
       ref.read(ipAddressProvider.notifier).setIp(ip);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('IP Address saved: $ip')),
-      );
-      Navigator.pop(context);
     }
+    if (camIp.isNotEmpty) {
+      ref.read(camIpAddressProvider.notifier).setIp(camIp);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('IP Addresses saved')),
+    );
+    Navigator.pop(context);
   }
 
   @override
@@ -55,10 +62,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             TextField(
               controller: _ipController,
               decoration: const InputDecoration(
-                labelText: 'ESP32 IP Address or Hostname',
+                labelText: 'ESP-12 (Hub) IP Address or Hostname',
                 hintText: 'e.g., 192.168.1.50 or smarthome.local',
                 border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.wifi),
+                prefixIcon: Icon(Icons.router),
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _camIpController,
+              decoration: const InputDecoration(
+                labelText: 'ESP32-CAM IP Address or Hostname',
+                hintText: 'e.g., 192.168.1.51 or cam.local',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.camera_alt),
               ),
               keyboardType: TextInputType.url,
             ),

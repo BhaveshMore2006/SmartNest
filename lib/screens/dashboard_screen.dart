@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/smart_home_provider.dart';
 import '../main.dart';
-import 'surveillance_screen.dart';
+import 'package:flutter_mjpeg/flutter_mjpeg.dart';
+import '../core/constants.dart';
 import 'settings_screen.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -12,6 +13,8 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final systemData = ref.watch(systemDataProvider);
     final themeMode = ref.watch(themeProvider);
+    final camIpAddress = ref.watch(camIpAddressProvider);
+    final streamUrl = Constants.getStreamUrl(camIpAddress);
 
     return Scaffold(
       appBar: AppBar(
@@ -38,7 +41,42 @@ class DashboardScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildSecurityCard(context, ref, systemData.armed, systemData.pirMotion),
+            if (camIpAddress.isNotEmpty)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  color: Colors.black,
+                  height: 250,
+                  width: double.infinity,
+                  child: Mjpeg(
+                    isLive: true,
+                    stream: streamUrl,
+                    timeout: const Duration(seconds: 15),
+                    error: (context, error, stack) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                          const SizedBox(height: 8),
+                          Text('Stream error: $error', style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+                        ],
+                      ),
+                    ),
+                    loading: (context) => const Center(child: CircularProgressIndicator()),
+                  ),
+                ),
+              ),
+            if (camIpAddress.isEmpty)
+              Container(
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Center(
+                  child: Text('Camera not configured.\nPlease set IP in Settings.', textAlign: TextAlign.center),
+                ),
+              ),
             const SizedBox(height: 16),
             Row(
               children: [
@@ -46,6 +84,41 @@ class DashboardScreen extends ConsumerWidget {
                 const SizedBox(width: 16),
                 Expanded(child: _buildEnvironmentCard(context, 'Humidity', '${systemData.humidity}%', Icons.water_drop, Colors.blue)),
               ],
+            ),
+            const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: systemData.pirMotion ? Colors.red.shade100 : Colors.green.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    Icon(
+                      systemData.pirMotion ? Icons.directions_run : Icons.accessibility_new,
+                      size: 36,
+                      color: systemData.pirMotion ? Colors.red : Colors.green,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('PIR Motion Sensor', style: TextStyle(color: Colors.grey)),
+                          Text(
+                            systemData.pirMotion ? 'MOTION DETECTED!' : 'All Clear (No Motion)',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: systemData.pirMotion ? Colors.red : Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 16),
             _buildControlCard(
@@ -63,19 +136,13 @@ class DashboardScreen extends ConsumerWidget {
               value: systemData.relayFan,
               onChanged: (val) => ref.read(systemDataProvider.notifier).toggleRelay(2, val),
             ),
-            const SizedBox(height: 32),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(16),
-                backgroundColor: Theme.of(context).primaryColor,
-                foregroundColor: Colors.white,
-              ),
-              icon: const Icon(Icons.camera_alt),
-              label: const Text('View Live Surveillance', style: TextStyle(fontSize: 16)),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SurveillanceScreen()),
-              ),
+            const SizedBox(height: 16),
+            _buildControlCard(
+              context: context,
+              title: 'Manual Buzzer Alarm',
+              icon: Icons.campaign,
+              value: systemData.buzzer,
+              onChanged: (val) => ref.read(systemDataProvider.notifier).triggerBuzzer(val),
             ),
           ],
         ),
@@ -83,55 +150,7 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSecurityCard(BuildContext context, WidgetRef ref, bool isArmed, bool motionDetected) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Icon(
-              isArmed ? Icons.shield : Icons.shield_outlined,
-              size: 48,
-              color: isArmed ? Colors.green : Colors.grey,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              isArmed ? 'System Armed' : 'System Disarmed',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            if (isArmed && motionDetected)
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.red),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.warning, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text('MOTION DETECTED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 16),
-            SwitchListTile(
-              title: const Text('Security Status'),
-              subtitle: Text(isArmed ? 'Alarm will trigger on motion' : 'Alarm disabled'),
-              value: isArmed,
-              activeColor: Colors.green,
-              onChanged: (val) => ref.read(systemDataProvider.notifier).toggleSecurity(val),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildEnvironmentCard(BuildContext context, String title, String value, IconData icon, Color color) {
     return Card(

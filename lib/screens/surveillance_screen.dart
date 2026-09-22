@@ -9,9 +9,9 @@ class SurveillanceScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final ipAddress = ref.watch(ipAddressProvider);
+    final camIpAddress = ref.watch(camIpAddressProvider);
     final systemData = ref.watch(systemDataProvider);
-    final streamUrl = Constants.getStreamUrl(ipAddress);
+    final streamUrl = Constants.getStreamUrl(camIpAddress);
 
     return Scaffold(
       appBar: AppBar(
@@ -23,7 +23,14 @@ class SurveillanceScreen extends ConsumerWidget {
           Container(
             color: Colors.black,
             height: 300,
-            child: Mjpeg(
+            child: camIpAddress.isEmpty 
+              ? const Center(
+                  child: Text(
+                    'Camera IP not configured. Please set it in Settings.',
+                    style: TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                )
+              : Mjpeg(
               isLive: true,
               stream: streamUrl,
               error: (context, error, stack) {
@@ -34,7 +41,7 @@ class SurveillanceScreen extends ConsumerWidget {
                       const Icon(Icons.error_outline, color: Colors.red, size: 48),
                       const SizedBox(height: 8),
                       Text('Stream error: $error', style: const TextStyle(color: Colors.white)),
-                      const Text('Ensure ESP32 is online and IP is correct.', style: TextStyle(color: Colors.grey)),
+                      const Text('Ensure ESP32-CAM is online and IP is correct.', style: TextStyle(color: Colors.grey)),
                     ],
                   ),
                 );

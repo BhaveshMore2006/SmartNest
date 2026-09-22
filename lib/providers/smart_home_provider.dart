@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../models/system_data.dart';
 import '../services/api_service.dart';
+import 'dart:async';
 import '../services/websocket_service.dart';
 
 final apiServiceProvider = Provider((ref) => ApiService());
@@ -33,6 +34,31 @@ class IpAddressNotifier extends StateNotifier<String> {
   }
 }
 
+// Provider for the currently active ESP32-CAM IP Address
+final camIpAddressProvider = StateNotifierProvider<CamIpAddressNotifier, String>((ref) {
+  return CamIpAddressNotifier();
+});
+
+class CamIpAddressNotifier extends StateNotifier<String> {
+  CamIpAddressNotifier() : super(Constants.defaultCamIp) {
+    _loadIp();
+  }
+
+  Future<void> _loadIp() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedIp = prefs.getString(Constants.camIpPrefKey);
+    if (savedIp != null && savedIp.isNotEmpty) {
+      state = savedIp;
+    }
+  }
+
+  Future<void> setIp(String ip) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(Constants.camIpPrefKey, ip);
+    state = ip;
+  }
+}
+
 // Provider for the live system data
 final systemDataProvider = StateNotifierProvider<SystemDataNotifier, SystemData>((ref) {
   final ip = ref.watch(ipAddressProvider);
@@ -46,34 +72,26 @@ class SystemDataNotifier extends StateNotifier<SystemData> {
   final ApiService api;
   final WebSocketService ws;
 
+  Timer? _timer;
+
   SystemDataNotifier(this.ip, this.api, this.ws) : super(SystemData()) {
     _init();
   }
 
-  Future<void> _init() async {
-    // 1. Get initial state via HTTP
+  void _init() {
+    // Start periodic polling synchronously so it can be safely cancelled
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) {
+      _fetchData();
+    });
+    // Fetch initial data immediately
+    _fetchData();
+  }
+
+  Future<void> _fetchData() async {
     final initialData = await api.getStatus(ip);
-    if (initialData != null) {
+    if (initialData != null && mounted) {
       state = initialData;
     }
-
-    // 2. Connect WebSocket and listen for updates
-    ws.connect(ip);
-    ws.stream.listen((message) {
-      if (message['type'] == 'TELEMETRY_UPDATE') {
-        state = state.copyWith(
-          temperature: (message['temperature'] ?? state.temperature).toDouble(),
-          humidity: (message['humidity'] ?? state.humidity).toDouble(),
-          pirMotion: message['pir'] ?? state.pirMotion,
-          relayLight: message['light'] ?? state.relayLight,
-          relayFan: message['fan'] ?? state.relayFan,
-          armed: message['armed'] ?? state.armed,
-        );
-      } else if (message['type'] == 'ALARM_TRIGGERED') {
-        // Handle alarm (e.g., show notification/dialog in UI layer)
-        state = state.copyWith(pirMotion: true);
-      }
-    });
   }
 
   Future<void> toggleRelay(int channel, bool value) async {
@@ -103,6 +121,7 @@ class SystemDataNotifier extends StateNotifier<SystemData> {
 
   @override
   void dispose() {
+    _timer?.cancel();
     ws.disconnect();
     super.dispose();
   }
